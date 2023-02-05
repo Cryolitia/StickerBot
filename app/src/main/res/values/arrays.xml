@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="quantizer">
+        <item>Uniform Quantizer</item>
+        <item>Median Cut Quantizer</item>
+        <item>K-Means Quantizer</item>
+        <item>Random Quantizer</item>
+        <item>Octree Quantizer</item>
+        <item>NeuQuant Quantizer</item>
+    </string-array>
+    <string-array name="quantizer_values">
+        <item>uniform</item>
+        <item>median_cut</item>
+        <item>kmeans</item>
+        <item>random</item>
+        <item>octree</item>
+        <item>neu_quant</item>
+    </string-array>
+    <string-array name="dither">
+        <item>No Dither</item>
+        <item>M2 Dither</item>
+        <item>Bayer Dither</item>
+        <item>Floyd Steinberg Dither</item>
+    </string-array>
+    <string-array name="dither_values">
+        <item>no</item>
+        <item>m2</item>
+        <item>bayer</item>
+        <item>floyd_steinberg</item>
+    </string-array>
+</resources>

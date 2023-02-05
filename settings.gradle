@@ -1,0 +1,26 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        maven {
+            url = uri("https://maven.pkg.github.com/Cryolitia/BurstLinker")
+            credentials {
+                username = "Cryolitia"
+                password = "9sb2n1ZvKGNMSzXqd0vIxX4nJJuRQHMOc3pf_phg".reverse()
+            }
+        }
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "StickerBot"
+include ':app'

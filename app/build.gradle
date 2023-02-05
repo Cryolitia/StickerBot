@@ -1,0 +1,61 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.google.gms.google-services'
+    id 'org.jetbrains.kotlin.plugin.serialization' version '1.7.20'
+}
+
+android {
+    namespace 'io.github.cryolitia.stickerbot'
+    compileSdk 33
+
+    defaultConfig {
+        applicationId "io.github.cryolitia.stickerbot"
+        minSdk 21
+        targetSdk 33
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    kotlinOptions {
+        jvmTarget = '11'
+        freeCompilerArgs += ["-Xcontext-receivers"]
+    }
+    buildFeatures {
+        viewBinding true
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.9.0'
+    implementation 'androidx.appcompat:appcompat:1.5.1'
+    implementation 'com.google.android.material:material:1.8.0-alpha02'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.navigation:navigation-fragment-ktx:2.5.3'
+    implementation 'androidx.navigation:navigation-ui-ktx:2.5.3'
+    implementation 'com.google.firebase:firebase-appindexing:20.0.0'
+    implementation "androidx.datastore:datastore-preferences:1.0.0"
+    implementation "androidx.preference:preference-ktx:1.2.0"
+
+    var ktor_version = "2.1.2"
+    implementation "io.ktor:ktor-client-core:$ktor_version"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4"
+    implementation "io.ktor:ktor-client-okhttp:$ktor_version"
+    implementation("io.ktor:ktor-client-content-negotiation:$ktor_version")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:$ktor_version")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.4.1")
+
+    implementation("com.bilibili:burstlinker:0.0.13")
+    implementation("com.airbnb.android:lottie:5.2.0")
+}

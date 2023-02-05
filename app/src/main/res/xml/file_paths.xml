@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <external-files-path
+        name="stickers"
+        path="Stickers/" />
+
+    <external-cache-path
+        name="cache"
+        path="Stickers/" />
+</paths>
