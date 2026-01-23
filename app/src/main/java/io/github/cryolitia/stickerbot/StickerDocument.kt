@@ -70,7 +70,7 @@ class StickerDocument : DocumentsProvider() {
     override fun queryDocument(documentId: String, projection: Array<out String>?): Cursor {
         val result = MatrixCursor(projection ?: defaultDocumentProjection)
         includeFile(result, documentId, null)
-        return result;
+        return result
     }
 
     override fun queryChildDocuments(
@@ -121,7 +121,7 @@ class StickerDocument : DocumentsProvider() {
         var file = getFileForDocId(documentId)
         if (file.isDirectory) {
             val array = file.listFiles { pathname -> pathname.isFile }
-            val thumb = array.find {
+            val thumb = array?.find {
                 it.name.startsWith("thumb", true)
             } ?: array?.get(0)
             if (thumb == null) {
@@ -210,7 +210,7 @@ class StickerDocument : DocumentsProvider() {
         }
         var flags = 0
         if (file.isDirectory) {
-            flags = flags or Document.FLAG_DIR_PREFERS_GRID or Document.FLAG_SUPPORTS_THUMBNAIL
+            flags = 0 or Document.FLAG_DIR_PREFERS_GRID or Document.FLAG_SUPPORTS_THUMBNAIL
         }
         val displayName = file.name
         val mimeType: String = getTypeForFile(file)
@@ -273,9 +273,9 @@ class StickerDocument : DocumentsProvider() {
     }
 
     /**
-     * Get the MIME data type of a document, given its filename.
+     * Get the MIME data type of a document, given its extension.
      *
-     * @param name the filename of the document
+     * @param String the extension of the document
      * @return the MIME data type of a document
      */
     private fun getTypeForExtension(extension: String): String {

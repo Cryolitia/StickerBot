@@ -6,7 +6,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.LayoutInflater
@@ -19,6 +18,8 @@ import android.webkit.MimeTypeMap
 import android.widget.ImageView
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.MenuHost
 import androidx.core.view.MenuProvider
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -76,7 +77,7 @@ class FirstFragment : PreferenceFragmentCompat() {
                     try {
                         val stream = image.inputStream()
                         preference.icon =
-                            BitmapDrawable(resources, BitmapFactory.decodeStream(stream))
+                            BitmapFactory.decodeStream(stream).toDrawable(resources)
                         stream.close()
                     } catch (e: Exception) {
                         e.printStackTrace()
@@ -226,10 +227,10 @@ class FirstFragment : PreferenceFragmentCompat() {
                                             replaceCache.createNewFile()
                                         }
 
-                                        val replaceBitmap = Bitmap.createBitmap(
+                                        val replaceBitmap = createBitmap(
                                             bitmap.width,
                                             bitmap.height,
-                                            bitmap.config
+                                            bitmap.config ?: Bitmap.Config.ARGB_8888
                                         )
                                         replaceBitmap.eraseColor(Color.WHITE)
                                         val canvas = Canvas(replaceBitmap)

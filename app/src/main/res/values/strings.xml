@@ -44,4 +44,6 @@
         vestibulum. Fusce dictum libero quis erat maximus, vitae volutpat diam dignissim.
     </string>
     <string name="add_stickers">Add Stickers</string>
+    <string name="sticker_set_image">Sticker Set Image</string>
+    <string name="sticker_image">Sticker Image</string>
 </resources>

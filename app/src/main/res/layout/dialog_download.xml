@@ -26,6 +26,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="16dp"
                 android:layout_marginTop="16dp"
+                android:contentDescription="@string/sticker_set_image"
                 android:visibility="gone"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
@@ -74,6 +75,7 @@
                 android:layout_width="128dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="16dp"
+                android:contentDescription="@string/sticker_image"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 tools:srcCompat="@tools:sample/avatars" />
@@ -84,10 +86,10 @@
                 android:layout_height="128dp"
                 android:layout_marginStart="16dp"
                 android:visibility="gone"
-                app:lottie_repeatMode="restart"
-                app:lottie_repeatCount="-1"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
+                app:layout_constraintTop_toTopOf="parent"
+                app:lottie_repeatCount="-1"
+                app:lottie_repeatMode="restart" />
 
             <TextView
                 android:id="@+id/StickerDetail"

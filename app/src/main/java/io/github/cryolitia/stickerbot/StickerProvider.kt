@@ -14,29 +14,26 @@ class StickerProvider : FileProvider(R.xml.file_paths) {
             e.printStackTrace()
         }
 
-        val authority = info.authority.split(";".toRegex()).dropLastWhile { it.isEmpty() }
-            .toTypedArray()[0]
+        val authority = info.authority.split(";")[0]
+
+        val mLockField = FileProvider::class.java.getDeclaredField("mLock")
+        mLockField.isAccessible = true
+        val mLock = mLockField.get(this)
 
         val sCacheField = FileProvider::class.java.getDeclaredField("sCache")
         sCacheField.isAccessible = true
         val sCache: HashMap<String, *> = sCacheField.get(this) as HashMap<String, *>
 
-        val mStrategyField = FileProvider::class.java.getDeclaredField("mStrategy")
-        mStrategyField.isAccessible = true
+        val mAuthorityField = FileProvider::class.java.getDeclaredField("mAuthority")
+        mAuthorityField.isAccessible = true
 
-        val getPathStrategyMethod = FileProvider::class.java.getDeclaredMethod(
-            "getPathStrategy",
-            Context::class.java,
-            String::class.java,
-            Int::class.javaPrimitiveType
-        )
-        getPathStrategyMethod.isAccessible = true
+        synchronized(mLock!!) {
+            mAuthorityField.set(this, authority)
+        }
 
-        synchronized(sCache) { sCache.remove(authority) }
-        mStrategyField.set(
-            this,
-            getPathStrategyMethod.invoke(this, context, authority, R.xml.file_paths)
-        )
+        synchronized(sCache) {
+            sCache.remove(authority)
+        }
     }
 
 }

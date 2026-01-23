@@ -28,7 +28,7 @@
         android:layout_gravity="bottom|end"
         android:layout_marginEnd="@dimen/fab_margin"
         android:layout_marginBottom="16dp"
-        app:srcCompat="@drawable/baseline_add"
-        android:contentDescription="@string/add_stickers" />
+        android:contentDescription="@string/add_stickers"
+        app:srcCompat="@drawable/baseline_add" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

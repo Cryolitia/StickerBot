@@ -32,36 +32,37 @@
                 <data android:scheme="cryolitia" />
                 <data android:host="stickerset" />
             </intent-filter>
-            <intent-filter>
+            <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
                 <data
-                    android:scheme="http"
                     android:host="t.me"
-                    android:pathPrefix="/addstickers" />
+                    android:pathPrefix="/addstickers"
+                    android:scheme="http" />
             </intent-filter>
-            <intent-filter>
+            <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
                 <data
-                    android:scheme="https"
                     android:host="t.me"
-                    android:pathPrefix="/addstickers" />
+                    android:pathPrefix="/addstickers"
+                    android:scheme="https" />
             </intent-filter>
 
         </activity>
 
         <provider
-            android:authorities="io.github.cryolitia.stickerbot.stickerprovider"
             android:name="io.github.cryolitia.stickerbot.StickerProvider"
+            android:authorities="io.github.cryolitia.stickerbot.stickerprovider"
             android:exported="true"
-            android:grantUriPermissions="true">
+            android:grantUriPermissions="true"
+            tools:ignore="ExportedContentProvider">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
@@ -69,8 +70,8 @@
         <provider
             android:name="io.github.cryolitia.stickerbot.StickerDocument"
             android:authorities="io.github.cryolitia.stickerbot.stickerdocument`"
-            android:grantUriPermissions="true"
             android:exported="true"
+            android:grantUriPermissions="true"
             android:permission="android.permission.MANAGE_DOCUMENTS">
             <intent-filter>
                 <action android:name="android.content.action.DOCUMENTS_PROVIDER" />

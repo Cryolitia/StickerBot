@@ -1,61 +1,61 @@
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <EditTextPreference
-        app:title="Telegram Bot Token"
         app:key="telegram_bot_token"
+        app:title="Telegram Bot Token"
         app:useSimpleSummaryProvider="true" />
 
     <Preference
-        app:title="Test Telegram Bot"
-        app:key="test_bot" />
+        app:key="test_bot"
+        app:title="Test Telegram Bot" />
 
     <SwitchPreferenceCompat
-        app:title="Use HTTP Proxy"
-        app:key="use_http_proxy" />
+        app:key="use_http_proxy"
+        app:title="Use HTTP Proxy" />
 
     <EditTextPreference
-        app:title="HTTP Proxy"
-        app:key="http_proxy"
         app:dependency="use_http_proxy"
+        app:key="http_proxy"
+        app:title="HTTP Proxy"
         app:useSimpleSummaryProvider="true" />
 
     <SwitchPreferenceCompat
-        app:title="Fill WebP's transparent area with white"
         app:key="replace_transparent"
-        app:summary="Fill WebP's transparent with white when sharing in order to alleviate some software transparency issues" />
+        app:summary="Fill WebP's transparent with white when sharing in order to alleviate some software transparency issues"
+        app:title="Fill WebP's transparent area with white" />
 
     <SwitchPreferenceCompat
-        app:title="Recode WebP to GIF"
         app:key="recode_webp"
-        app:summary="Recode WebP to GIF when sharing in order to alleviate some software transparency issues" />
+        app:summary="Recode WebP to GIF when sharing in order to alleviate some software transparency issues"
+        app:title="Recode WebP to GIF" />
 
     <SwitchPreferenceCompat
-        app:title="Switch GIF Encoder"
+        app:defaultValue="true"
         app:key="gif_encoder"
-        app:defaultValue="true" />
+        app:title="Switch GIF Encoder" />
 
     <ListPreference
-        app:title="GIF Encoder Quantizer"
-        app:key="quantizer"
         app:defaultValue="kmeans"
+        app:dependency="gif_encoder"
         app:entries="@array/quantizer"
         app:entryValues="@array/quantizer_values"
-        app:useSimpleSummaryProvider="true"
-        app:dependency="gif_encoder" />
+        app:key="quantizer"
+        app:title="GIF Encoder Quantizer"
+        app:useSimpleSummaryProvider="true" />
 
     <ListPreference
-        app:title="GIF Encoder Dither"
-        app:key="dither"
         app:defaultValue="no"
+        app:dependency="gif_encoder"
         app:entries="@array/dither"
         app:entryValues="@array/dither_values"
-        app:useSimpleSummaryProvider="true"
-        app:dependency="gif_encoder" />
+        app:key="dither"
+        app:title="GIF Encoder Dither"
+        app:useSimpleSummaryProvider="true" />
 
     <Preference
-        app:title="Open Document"
+        app:key="open_document"
         app:summary="For Test Only"
-        app:key="open_document" />
+        app:title="Open Document" />
 
 
 </PreferenceScreen>

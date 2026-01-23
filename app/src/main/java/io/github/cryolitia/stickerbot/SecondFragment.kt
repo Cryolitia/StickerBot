@@ -4,34 +4,39 @@ import android.content.Context
 import android.content.Intent
 import android.content.Intent.ACTION_GET_CONTENT
 import android.os.Bundle
-import androidx.fragment.app.Fragment
-import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.datastore.core.DataStore
-import androidx.datastore.dataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.fragment.findNavController
-import androidx.preference.*
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.engine.*
-import io.ktor.client.engine.okhttp.*
-import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.client.request.*
-import io.ktor.http.*
-import io.ktor.serialization.kotlinx.json.*
+import androidx.preference.Preference
+import androidx.preference.PreferenceDataStore
+import androidx.preference.PreferenceFragmentCompat
+import androidx.preference.SwitchPreferenceCompat
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.engine.ProxyBuilder
+import io.ktor.client.engine.http
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.request.get
+import io.ktor.client.request.headers
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
+import io.ktor.http.append
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 
 /**
  * A simple [Fragment] subclass as the second destination in the navigation.
@@ -50,6 +55,22 @@ const val TEST_BOT = "test_bot"
 
 class SecondFragment : PreferenceFragmentCompat() {
 
+    val getContent =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            lifecycleScope.launch {
+                with(requireContext()) {
+                    MaterialAlertDialogBuilder(requireContext())
+                        .setTitle(ActivityResult.resultCodeToString(result.resultCode))
+                        .setMessage(result.data.toString())
+                        .setNeutralButton("Close") { dialog, _ ->
+                            dialog.dismiss()
+                        }
+                        .create()
+                        .show()
+                }
+            }
+        }
+
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         preferenceManager.preferenceDataStore = SettingDataStore(requireContext().dataStore)
         setPreferencesFromResource(R.xml.setting_preference, rootKey)
@@ -60,7 +81,7 @@ class SecondFragment : PreferenceFragmentCompat() {
         findPreference<Preference>(OPEN_DOCUMENT)?.setOnPreferenceClickListener {
             Intent(ACTION_GET_CONTENT).apply {
                 type = "*/*"
-                startActivityForResult(this, 42)
+                getContent.launch(this)
             }
             true
         }
@@ -89,20 +110,25 @@ class SecondFragment : PreferenceFragmentCompat() {
                             }
                         }
                     }
-                    val response = withContext(Dispatchers.IO) {
-                        client.get("https://api.tlgr.org/bot$token/getMe") {
-                            method = HttpMethod.Get
-                            headers {
-                                append(HttpHeaders.Accept, ContentType.Application.Json)
+                    try {
+                        val response = withContext(Dispatchers.IO) {
+                            client.get("https://api.tlgr.org/bot$token/getMe") {
+                                method = HttpMethod.Get
+                                headers {
+                                    append(HttpHeaders.Accept, ContentType.Application.Json)
+                                }
                             }
                         }
+                        if (!response.status.isSuccess()) {
+                            response.status.toString().alert()
+                            return@launch
+                        }
+                        response.body<String>().alert()
+                    } catch (e: Throwable) {
+                        e.toString().alert()
+                    } finally {
+                        prepareDialog.dismiss()
                     }
-                    if (!response.status.isSuccess()) {
-                        response.status.toString().alert()
-                        return@launch
-                    }
-                    prepareDialog.dismiss()
-                    response.body<String>().alert()
                 }
             }
             true

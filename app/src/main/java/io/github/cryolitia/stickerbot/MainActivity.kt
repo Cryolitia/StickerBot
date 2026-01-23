@@ -1,5 +1,6 @@
 package io.github.cryolitia.stickerbot
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
@@ -20,6 +21,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.findNavController
+import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.navigateUp
 import androidx.navigation.ui.setupActionBarWithNavController
@@ -42,6 +44,7 @@ import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
+import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
@@ -77,7 +80,9 @@ class MainActivity : AppCompatActivity() {
 
         setSupportActionBar(binding.toolbar)
 
-        val navController = findNavController(R.id.nav_host_fragment_content_main)
+        val navHostFragment =
+            supportFragmentManager.findFragmentById(R.id.nav_host_fragment_content_main) as NavHostFragment
+        val navController = navHostFragment.navController
         appBarConfiguration = AppBarConfiguration(navController.graph)
         setupActionBarWithNavController(navController, appBarConfiguration)
 
@@ -130,7 +135,6 @@ class MainActivity : AppCompatActivity() {
                             params.setMargins(dp, dp, dp, 0)
                             textInputLayout.layoutParams = params
                         }
-                        Unit
                     }
                 }
             }
@@ -147,6 +151,7 @@ class MainActivity : AppCompatActivity() {
         intent.data = null
     }
 
+    @SuppressLint("SetTextI18n")
     val downloadStickers: (context: Context, stickersUrl: String) -> Unit =
         { context, stickersUrl ->
             lifecycleScope.launch onClickPositiveButton@{
@@ -180,22 +185,30 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
-                val response = withContext(Dispatchers.IO) {
-                    client.get("https://api.tlgr.org/bot$token/getStickerSet") {
-                        url {
-                            parameters.append("name", stickersUrl)
-                        }
-                        method = HttpMethod.Get
-                        headers {
-                            append(HttpHeaders.Accept, ContentType.Application.Json)
+                val response: HttpResponse
+
+                try {
+                    response = withContext(Dispatchers.IO) {
+                        client.get("https://api.tlgr.org/bot$token/getStickerSet") {
+                            url {
+                                parameters.append("name", stickersUrl)
+                            }
+                            method = HttpMethod.Get
+                            headers {
+                                append(HttpHeaders.Accept, ContentType.Application.Json)
+                            }
                         }
                     }
-                }
-                prepareDialog.dismiss()
-                if (!response.status.isSuccess()) {
-                    response.status.toString().alert()
+                    prepareDialog.dismiss()
+                    if (!response.status.isSuccess()) {
+                        response.status.toString().alert()
+                        return@onClickPositiveButton
+                    }
+                } catch (e: Throwable) {
+                    e.toString().alert()
                     return@onClickPositiveButton
                 }
+
                 val stickerSetResult: TelegramResult<StickerSet> = response.body()
                 if (!stickerSetResult.ok || stickerSetResult.result == null) {
                     stickerSetResult.toString().alert()
@@ -381,40 +394,44 @@ suspend fun HttpClient.getFile(
     onSuccess: suspend (data: ByteArray, file_unique_id: String, file_path: String) -> Unit,
     onFailure: suspend (reason: String) -> Unit
 ) {
-    val response2 = get("https://api.tlgr.org/bot$token/getFile") {
-        url {
-            parameters.append("file_id", file_id)
+    try {
+        val response2 = get("https://api.tlgr.org/bot$token/getFile") {
+            url {
+                parameters.append("file_id", file_id)
+            }
+            method = HttpMethod.Get
+            headers {
+                append(HttpHeaders.Accept, ContentType.Application.Json)
+            }
         }
-        method = HttpMethod.Get
-        headers {
-            append(HttpHeaders.Accept, ContentType.Application.Json)
-        }
-    }
-    if (response2.status.isSuccess()) {
-        val file: TelegramResult<TelegramFile> = response2.body()
-        if (file.ok && file.result != null && file.result.file_path != null) {
-            val response3 = get("https://api.tlgr.org/file/bot$token/${file.result.file_path}")
-            if (response3.status.isSuccess()) {
-                val byteArray: ByteArray = response3.body()
-                onSuccess(byteArray, file.result.file_unique_id, file.result.file_path)
+        if (response2.status.isSuccess()) {
+            val file: TelegramResult<TelegramFile> = response2.body()
+            if (file.ok && file.result != null && file.result.file_path != null) {
+                val response3 = get("https://api.tlgr.org/file/bot$token/${file.result.file_path}")
+                if (response3.status.isSuccess()) {
+                    val byteArray: ByteArray = response3.body()
+                    onSuccess(byteArray, file.result.file_unique_id, file.result.file_path)
+                }
+            } else {
+                onFailure(file.toString())
             }
         } else {
-            onFailure(file.toString())
+            onFailure(response2.status.toString())
         }
-    } else {
-        onFailure(response2.status.toString())
+    } catch (e: Throwable) {
+        onFailure(e.toString())
     }
 }
 
-context(Context) suspend fun String.toast() {
+context(context: Context) suspend fun String.toast() {
     withContext(Dispatchers.Main) {
-        Toast.makeText(this@Context, this@toast, Toast.LENGTH_LONG).show()
+        Toast.makeText(context, this@toast, Toast.LENGTH_LONG).show()
     }
 }
 
-context(Context) suspend fun String.alert() {
+context(context: Context) suspend fun String.alert() {
     withContext(Dispatchers.Main) {
-        MaterialAlertDialogBuilder(this@Context)
+        MaterialAlertDialogBuilder(context)
             .setMessage(this@alert)
             .setPositiveButton("OK") { dialog, _ ->
                 dialog.dismiss()
@@ -424,12 +441,12 @@ context(Context) suspend fun String.alert() {
     }
 }
 
-context(Context) suspend fun loadingDialog(): AlertDialog {
+context(context: Context) suspend fun loadingDialog(): AlertDialog {
     return withContext(Dispatchers.Main) {
-        val linearProgressIndicator = LinearProgressIndicator(this@Context).apply {
+        val linearProgressIndicator = LinearProgressIndicator(context).apply {
             isIndeterminate = true
         }
-        val prepareDialog = MaterialAlertDialogBuilder(this@Context)
+        val prepareDialog = MaterialAlertDialogBuilder(context)
             .setTitle("Loading……")
             .setView(linearProgressIndicator)
             .setCancelable(false)
@@ -440,7 +457,7 @@ context(Context) suspend fun loadingDialog(): AlertDialog {
             val dp = TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_DIP,
                 16F,
-                resources.displayMetrics
+                context.resources.displayMetrics
             ).toInt()
             params.setMargins(dp, dp, dp, 0)
             linearProgressIndicator.layoutParams = params
