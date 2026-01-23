@@ -20,8 +20,6 @@ data class StickerSet(
     val name: String,
     val title: String,
     val sticker_type: String,
-    val is_animated: Boolean,
-    val is_video: Boolean,
     val stickers: List<Sticker>,
     val thumb: PhotoSize? = null
 ) {
@@ -35,12 +33,6 @@ data class StickerSet(
             append('\n')
             append("sticker_type=\t")
             append(sticker_type)
-            append('\n')
-            append("is_animated=\t")
-            append(is_animated)
-            append('\n')
-            append("is_video=\t")
-            append(is_video)
             toString()
         }
     }

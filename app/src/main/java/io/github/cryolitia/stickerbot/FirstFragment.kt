@@ -20,6 +20,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.toDrawable
+import androidx.core.graphics.scale
 import androidx.core.view.MenuHost
 import androidx.core.view.MenuProvider
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -33,8 +34,11 @@ import androidx.preference.Preference.OnPreferenceClickListener
 import androidx.preference.PreferenceFragmentCompat
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.RecyclerView.ViewHolder
-import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import com.bilibili.burstlinker.BurstLinker
+import com.google.android.flexbox.FlexDirection
+import com.google.android.flexbox.FlexboxLayout
+import com.google.android.flexbox.FlexboxLayoutManager
+import com.google.android.flexbox.JustifyContent
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -46,6 +50,8 @@ import java.io.File
  * A simple [Fragment] subclass as the default destination in the navigation.
  */
 class FirstFragment : PreferenceFragmentCompat() {
+
+    var previewScale: Float = 0.5f
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         preferenceScreen = preferenceManager.createPreferenceScreen(requireContext())
@@ -84,40 +90,49 @@ class FirstFragment : PreferenceFragmentCompat() {
                     }
                 }
                 preference.onPreferenceClickListener = OnPreferenceClickListener {
-                    val recyclerView = RecyclerView(requireContext())
-                    recyclerView.layoutManager =
-                        StaggeredGridLayoutManager(2, StaggeredGridLayoutManager.VERTICAL)
-                    recyclerView.adapter = GalleryAdapter(directory)
-                    MaterialAlertDialogBuilder(requireContext())
-                        .setTitle(directory.name)
-                        .setView(recyclerView)
-                        .setNegativeButton("Delete") { _, _ ->
-                            MaterialAlertDialogBuilder(requireContext())
-                                .setMessage("Delete?")
-                                .setNegativeButton("Confirm") { _, _ ->
-                                    directory.deleteRecursively()
-                                    requireActivity().recreate()
-                                }
-                                .setNeutralButton("Cancel") { dialog, _ ->
-                                    dialog.dismiss()
-                                }
-                                .create()
-                                .show()
+                    lifecycleScope.launch {
+                        val recyclerView = RecyclerView(requireContext())
+                        val flexLayoutManager = FlexboxLayoutManager(context)
+                        flexLayoutManager.flexDirection = FlexDirection.ROW
+                        flexLayoutManager.justifyContent = JustifyContent.SPACE_AROUND
+                        recyclerView.layoutManager = flexLayoutManager
+
+                        previewScale = requireContext().getPreference(
+                            stringPreferencesKey(STICKER_PER_LINE), "0.5"
+                        ).toFloatOrNull() ?: 0.5f
+
+                        recyclerView.adapter = GalleryAdapter(directory)
+                        MaterialAlertDialogBuilder(requireContext())
+                            .setTitle(directory.name)
+                            .setView(recyclerView)
+                            .setNegativeButton("Delete") { _, _ ->
+                                MaterialAlertDialogBuilder(requireContext())
+                                    .setMessage("Delete?")
+                                    .setNegativeButton("Confirm") { _, _ ->
+                                        directory.deleteRecursively()
+                                        requireActivity().recreate()
+                                    }
+                                    .setNeutralButton("Cancel") { dialog, _ ->
+                                        dialog.dismiss()
+                                    }
+                                    .create()
+                                    .show()
+                            }
+                            .setNeutralButton("Close") { dialog, _ ->
+                                dialog.dismiss()
+                            }
+                            .create()
+                            .show()
+                        val params = recyclerView.layoutParams
+                        if (params is ViewGroup.MarginLayoutParams) {
+                            val dp = TypedValue.applyDimension(
+                                TypedValue.COMPLEX_UNIT_DIP,
+                                16F,
+                                resources.displayMetrics
+                            ).toInt()
+                            params.setMargins(dp, dp, dp, 0)
+                            recyclerView.layoutParams = params
                         }
-                        .setNeutralButton("Close") { dialog, _ ->
-                            dialog.dismiss()
-                        }
-                        .create()
-                        .show()
-                    val params = recyclerView.layoutParams
-                    if (params is ViewGroup.MarginLayoutParams) {
-                        val dp = TypedValue.applyDimension(
-                            TypedValue.COMPLEX_UNIT_DIP,
-                            16F,
-                            resources.displayMetrics
-                        ).toInt()
-                        params.setMargins(dp, dp, dp, 0)
-                        recyclerView.layoutParams = params
                     }
                     true
                 }
@@ -184,6 +199,10 @@ class FirstFragment : PreferenceFragmentCompat() {
         override fun getItemCount(): Int = array.size
 
         override fun onBindViewHolder(holder: ViewHolderTemplate<ImageView>, position: Int) {
+            val params = holder.view.layoutParams
+            if (params is FlexboxLayout.LayoutParams) {
+                params.flexGrow = 1.0f
+            }
             holder.view.setOnClickListener {
                 lifecycleScope.launch {
                     var webpFile = array[position]
@@ -206,7 +225,6 @@ class FirstFragment : PreferenceFragmentCompat() {
                             )) && (encodeWebp || replaceTransparent)
                         ) {
                             withContext(Dispatchers.IO) {
-
                                 val cacheDirectory =
                                     File(requireContext().externalCacheDir, "Stickers")
                                 val stickerCacheDirectory = File(cacheDirectory, directory.name)
@@ -321,9 +339,17 @@ class FirstFragment : PreferenceFragmentCompat() {
                     }
                 }
             }
+
             try {
                 val stream = array[position].inputStream()
-                holder.view.setImageBitmap(BitmapFactory.decodeStream(stream))
+                val bitmap = BitmapFactory.decodeStream(stream)
+                holder.view.setImageBitmap(
+                    bitmap.scale(
+                        (bitmap.width * previewScale).toInt(),
+                        (bitmap.height * previewScale).toInt(),
+                        false
+                    )
+                )
                 stream.close()
             } catch (e: Exception) {
                 e.printStackTrace()

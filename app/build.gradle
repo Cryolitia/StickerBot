@@ -49,6 +49,7 @@ dependencies {
     implementation 'com.google.firebase:firebase-appindexing:20.0.0'
     implementation "androidx.datastore:datastore-preferences:1.2.0"
     implementation "androidx.preference:preference-ktx:1.2.1"
+    implementation 'com.google.android.flexbox:flexbox:3.0.0'
 
     var ktor_version = "3.4.0"
     implementation "io.ktor:ktor-client-core:3.4.0"

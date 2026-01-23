@@ -58,6 +58,7 @@ import kotlinx.serialization.json.Json
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.zip.GZIPInputStream
+import kotlin.system.exitProcess
 
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -85,6 +86,20 @@ class MainActivity : AppCompatActivity() {
         val navController = navHostFragment.navController
         appBarConfiguration = AppBarConfiguration(navController.graph)
         setupActionBarWithNavController(navController, appBarConfiguration)
+
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            lifecycleScope.launch {
+                MaterialAlertDialogBuilder(this@MainActivity)
+                    .setTitle("Uncaught exception on thread $thread")
+                    .setMessage(throwable.toString())
+                    .setNeutralButton("Close") { dialog, _ ->
+                        dialog.dismiss()
+                        exitProcess(-1)
+                    }
+                    .create()
+                    .show()
+            }
+        }
 
         fab = binding.fab
         binding.fab.setOnClickListener {
@@ -189,7 +204,7 @@ class MainActivity : AppCompatActivity() {
 
                 try {
                     response = withContext(Dispatchers.IO) {
-                        client.get("https://api.tlgr.org/bot$token/getStickerSet") {
+                        client.get("https://api.telegram.org/bot$token/getStickerSet") {
                             url {
                                 parameters.append("name", stickersUrl)
                             }
@@ -395,7 +410,7 @@ suspend fun HttpClient.getFile(
     onFailure: suspend (reason: String) -> Unit
 ) {
     try {
-        val response2 = get("https://api.tlgr.org/bot$token/getFile") {
+        val response2 = get("https://api.telegram.org/bot$token/getFile") {
             url {
                 parameters.append("file_id", file_id)
             }
@@ -407,7 +422,7 @@ suspend fun HttpClient.getFile(
         if (response2.status.isSuccess()) {
             val file: TelegramResult<TelegramFile> = response2.body()
             if (file.ok && file.result != null && file.result.file_path != null) {
-                val response3 = get("https://api.tlgr.org/file/bot$token/${file.result.file_path}")
+                val response3 = get("https://api.telegram.org/file/bot$token/${file.result.file_path}")
                 if (response3.status.isSuccess()) {
                     val byteArray: ByteArray = response3.body()
                     onSuccess(byteArray, file.result.file_unique_id, file.result.file_path)

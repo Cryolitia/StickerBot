@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.Intent.ACTION_GET_CONTENT
 import android.os.Bundle
+import android.text.InputType
 import android.view.View
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,6 +15,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.preference.EditTextPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceDataStore
 import androidx.preference.PreferenceFragmentCompat
@@ -52,6 +54,7 @@ const val DITHER = "dither"
 const val REPLACE_TRANSPARENT = "replace_transparent"
 const val OPEN_DOCUMENT = "open_document"
 const val TEST_BOT = "test_bot"
+const val STICKER_PER_LINE = "sticker_per_line"
 
 class SecondFragment : PreferenceFragmentCompat() {
 
@@ -74,6 +77,9 @@ class SecondFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         preferenceManager.preferenceDataStore = SettingDataStore(requireContext().dataStore)
         setPreferencesFromResource(R.xml.setting_preference, rootKey)
+        findPreference<EditTextPreference>(STICKER_PER_LINE)?.setOnBindEditTextListener { editText ->
+            editText.inputType = InputType.TYPE_NUMBER_FLAG_DECIMAL
+        }
         findPreference<SwitchPreferenceCompat>(GIF_CODER)?.summaryProvider =
             Preference.SummaryProvider<SwitchPreferenceCompat> {
                 if (it.isChecked) "bilibili/BurstLinker" else "nbadal/android-gif-encoder"
@@ -112,7 +118,7 @@ class SecondFragment : PreferenceFragmentCompat() {
                     }
                     try {
                         val response = withContext(Dispatchers.IO) {
-                            client.get("https://api.tlgr.org/bot$token/getMe") {
+                            client.get("https://api.telegram.org/bot$token/getMe") {
                                 method = HttpMethod.Get
                                 headers {
                                     append(HttpHeaders.Accept, ContentType.Application.Json)
