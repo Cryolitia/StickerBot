@@ -7,4 +7,8 @@
     <external-cache-path
         name="cache"
         path="Stickers/" />
+
+    <external-files-path
+        name="metadata"
+        path="Metadata/" />
 </paths>

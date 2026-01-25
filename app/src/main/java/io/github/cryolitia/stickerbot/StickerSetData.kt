@@ -1,3 +1,5 @@
+@file:Suppress("PropertyName")
+
 package io.github.cryolitia.stickerbot
 
 @kotlinx.serialization.Serializable

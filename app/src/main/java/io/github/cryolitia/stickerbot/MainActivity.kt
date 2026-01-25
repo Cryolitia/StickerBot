@@ -1,13 +1,16 @@
 package io.github.cryolitia.stickerbot
 
 import android.annotation.SuppressLint
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.os.PowerManager
 import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -55,6 +58,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import org.apache.commons.io.IOUtils
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.zip.GZIPInputStream
@@ -115,6 +119,16 @@ class MainActivity : AppCompatActivity() {
                             null,
                             com.google.android.material.R.attr.textInputOutlinedStyle
                         ).apply {
+
+                            var clipText: String? = null
+                            val clipboard: ClipboardManager = context.getSystemService(
+                                CLIPBOARD_SERVICE
+                            ) as ClipboardManager
+                            val clipData = clipboard.primaryClip
+                            if (clipData != null && clipData.itemCount > 0) {
+                                clipText = clipData.getItemAt(0).coerceToText(context).toString()
+                            }
+
                             prefixText = "https://t.me/addstickers/"
                             textInputEditText = TextInputEditText(this.context).apply {
                                 doAfterTextChanged {
@@ -126,6 +140,9 @@ class MainActivity : AppCompatActivity() {
                                             )
                                         )
                                     }
+                                }
+                                if (clipText != null && clipText.contains("https://t.me/addstickers/")) {
+                                    setText(clipText)
                                 }
                             }
                             addView(textInputEditText)
@@ -175,7 +192,6 @@ class MainActivity : AppCompatActivity() {
                     "Please set telegram bot token in settings firstly.".toast()
                     return@onClickPositiveButton
                 }
-                val prepareDialog = loadingDialog()
                 if (stickersUrl.isBlank()) {
                     "Stickers URL is blank!".toast()
                 }
@@ -188,6 +204,7 @@ class MainActivity : AppCompatActivity() {
                         return@onClickPositiveButton
                     }
                 }
+                val prepareDialog = loadingDialog()
                 val client = HttpClient(OkHttp) {
                     install(ContentNegotiation) {
                         json(Json {
@@ -216,7 +233,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     prepareDialog.dismiss()
                     if (!response.status.isSuccess()) {
-                        response.status.toString().alert()
+                        Pair(response.status.toString(), response.body<String>()).alert()
                         return@onClickPositiveButton
                     }
                 } catch (e: Throwable) {
@@ -236,6 +253,14 @@ class MainActivity : AppCompatActivity() {
                     .setCancelable(false)
                     .create()
                 dialog.show()
+
+                val wakeLock: PowerManager.WakeLock =
+                    (getSystemService(POWER_SERVICE) as PowerManager).run {
+                        newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "StickerBot::Download")
+                    }
+                wakeLock.acquire(5 * 60 * 1000)
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
                 withContext(Dispatchers.IO) {
                     withContext(Dispatchers.Main) {
                         dialogBinding.StickerSetDetail.text = stickerSetResult.result.toString()
@@ -249,8 +274,8 @@ class MainActivity : AppCompatActivity() {
                         client.getFile(
                             token,
                             stickerSetResult.result.thumb.file_id,
-                            { data, _, file_path ->
-                                val extension = file_path.substring(file_path.lastIndexOf('.'))
+                            { data, _, filePath ->
+                                val extension = filePath.substring(filePath.lastIndexOf('.'))
                                 val stickerFile = File(stickerSetDirectory, "thumb$extension")
                                 if (!stickerFile.exists()) {
                                     withContext(Dispatchers.IO) {
@@ -283,9 +308,9 @@ class MainActivity : AppCompatActivity() {
                         .setUrl("cryolitia://stickerset/${stickerSetResult.result.name}")
                     val stickerList = mutableListOf<StickerBuilder>()
                     for (sticker in stickerSetResult.result.stickers) {
-                        client.getFile(token, sticker.file_id, { data, file_unique_id, file_path ->
+                        client.getFile(token, sticker.file_id, { data, fileUniqueId, filePath ->
                             var data = data
-                            var file_path = file_path
+                            var filePath = filePath
                             withContext(Dispatchers.Main) {
                                 dialogBinding.StickerDetail.text = sticker.toString()
                                 dialogBinding.emoji.text = sticker.emoji ?: ""
@@ -304,8 +329,8 @@ class MainActivity : AppCompatActivity() {
                                     try {
                                         val input = ByteArrayInputStream(data)
                                         val gzip = GZIPInputStream(input)
-                                        data = gzip.readAllBytes()
-                                        file_path = file_path.replace(".tgs", ".json")
+                                        data = IOUtils.toByteArray(gzip)
+                                        filePath = filePath.replace(".tgs", ".json")
                                         input.close()
                                         gzip.close()
                                         withContext(Dispatchers.Main) {
@@ -333,8 +358,8 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 }
                             }
-                            val extension = file_path.substring(file_path.lastIndexOf('.'))
-                            val stickerFile = File(stickerSetDirectory, file_unique_id + extension)
+                            val extension = filePath.substring(filePath.lastIndexOf('.'))
+                            val stickerFile = File(stickerSetDirectory, fileUniqueId + extension)
                             if (!stickerFile.exists()) {
                                 withContext(Dispatchers.IO) {
                                     stickerFile.createNewFile()
@@ -354,7 +379,7 @@ class MainActivity : AppCompatActivity() {
                                 )
                                 val stickerBuilder = Indexables.stickerBuilder().apply {
                                     setName(sticker.file_unique_id)
-                                    setUrl("Cryolitia://StickerSet/${stickerSetResult.result.name}/${sticker.file_unique_id}")
+                                    setUrl("cryolitia://stickerset/${stickerSetResult.result.name}/${sticker.file_unique_id}")
                                     setImage(uri.toString())
                                     if (!sticker.emoji.isNullOrBlank()) {
                                         setDescription(sticker.emoji)
@@ -385,12 +410,31 @@ class MainActivity : AppCompatActivity() {
                             }.toTypedArray()
                         )
                     }
+
+                    val stickerSetMetadata = Json.encodeToString(stickerSetResult.result)
+                    val metadataDirectory = File(context.getExternalFilesDir(null), "Metadata")
+                    if (!metadataDirectory.exists()) {
+                        metadataDirectory.mkdirs()
+                    }
+                    val metadataFile =
+                        File(metadataDirectory, "${stickerSetResult.result.name}.json")
+                    if (!metadataFile.exists()) {
+                        metadataFile.createNewFile()
+                    }
+                    metadataFile.writeText(stickerSetMetadata)
+
                     withContext(Dispatchers.Main) {
-                        "Finish!".toast()
-                        dialog.setCancelable(true)
-                        dialog.setOnDismissListener {
-                            recreate()
-                        }
+                        MaterialAlertDialogBuilder(context)
+                            .setTitle(stickerSetResult.result.title)
+                            .setMessage("Success")
+                            .setPositiveButton("OK") { dialog, _ ->
+                                dialog.dismiss()
+                                recreate()
+                            }
+                            .create()
+                            .show()
+                        wakeLock.release()
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                     }
                 }
             }
@@ -405,14 +449,14 @@ class MainActivity : AppCompatActivity() {
 
 suspend fun HttpClient.getFile(
     token: String,
-    file_id: String,
-    onSuccess: suspend (data: ByteArray, file_unique_id: String, file_path: String) -> Unit,
+    fileId: String,
+    onSuccess: suspend (data: ByteArray, fileUniqueId: String, filePath: String) -> Unit,
     onFailure: suspend (reason: String) -> Unit
 ) {
     try {
         val response2 = get("https://api.telegram.org/bot$token/getFile") {
             url {
-                parameters.append("file_id", file_id)
+                parameters.append("file_id", fileId)
             }
             method = HttpMethod.Get
             headers {
@@ -422,7 +466,8 @@ suspend fun HttpClient.getFile(
         if (response2.status.isSuccess()) {
             val file: TelegramResult<TelegramFile> = response2.body()
             if (file.ok && file.result != null && file.result.file_path != null) {
-                val response3 = get("https://api.telegram.org/file/bot$token/${file.result.file_path}")
+                val response3 =
+                    get("https://api.telegram.org/file/bot$token/${file.result.file_path}")
                 if (response3.status.isSuccess()) {
                     val byteArray: ByteArray = response3.body()
                     onSuccess(byteArray, file.result.file_unique_id, file.result.file_path)
@@ -455,6 +500,20 @@ context(context: Context) suspend fun String.alert() {
             .show()
     }
 }
+
+context(context: Context) suspend fun Pair<String, String>.alert() {
+    withContext(Dispatchers.Main) {
+        MaterialAlertDialogBuilder(context)
+            .setTitle(this@alert.first)
+            .setMessage(this@alert.second)
+            .setPositiveButton("OK") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .create()
+            .show()
+    }
+}
+
 
 context(context: Context) suspend fun loadingDialog(): AlertDialog {
     return withContext(Dispatchers.Main) {

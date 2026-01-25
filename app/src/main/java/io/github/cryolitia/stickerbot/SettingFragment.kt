@@ -56,7 +56,7 @@ const val OPEN_DOCUMENT = "open_document"
 const val TEST_BOT = "test_bot"
 const val STICKER_PER_LINE = "sticker_per_line"
 
-class SecondFragment : PreferenceFragmentCompat() {
+class SettingFragment : PreferenceFragmentCompat() {
 
     val getContent =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -90,6 +90,9 @@ class SecondFragment : PreferenceFragmentCompat() {
                 getContent.launch(this)
             }
             true
+        }
+        findPreference<EditTextPreference>(HTTP_PROXY)?.setOnBindEditTextListener { editText ->
+            editText.inputType = InputType.TYPE_TEXT_VARIATION_URI
         }
         findPreference<Preference>(TEST_BOT)?.setOnPreferenceClickListener {
             lifecycleScope.launch {

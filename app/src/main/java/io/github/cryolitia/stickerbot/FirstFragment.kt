@@ -1,12 +1,9 @@
 package io.github.cryolitia.stickerbot
 
 import android.content.Context
-import android.content.Intent
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.Color
 import android.os.Bundle
+import android.util.Log
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.Menu
@@ -14,16 +11,9 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.MimeTypeMap
-import android.widget.ImageView
-import androidx.appcompat.app.AlertDialog
-import androidx.core.content.FileProvider
-import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.toDrawable
-import androidx.core.graphics.scale
 import androidx.core.view.MenuHost
 import androidx.core.view.MenuProvider
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
@@ -33,25 +23,19 @@ import androidx.preference.Preference
 import androidx.preference.Preference.OnPreferenceClickListener
 import androidx.preference.PreferenceFragmentCompat
 import androidx.recyclerview.widget.RecyclerView
-import androidx.recyclerview.widget.RecyclerView.ViewHolder
 import com.bilibili.burstlinker.BurstLinker
 import com.google.android.flexbox.FlexDirection
-import com.google.android.flexbox.FlexboxLayout
 import com.google.android.flexbox.FlexboxLayoutManager
 import com.google.android.flexbox.JustifyContent
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
+import kotlinx.serialization.json.Json
 import java.io.File
 
 /**
  * A simple [Fragment] subclass as the default destination in the navigation.
  */
 class FirstFragment : PreferenceFragmentCompat() {
-
-    var previewScale: Float = 0.5f
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         preferenceScreen = preferenceManager.createPreferenceScreen(requireContext())
@@ -62,8 +46,29 @@ class FirstFragment : PreferenceFragmentCompat() {
 
         for (directory in stickersDirectory.listFiles()!!) {
             if (directory.isDirectory) {
+                val metadataFile = File(
+                    requireContext().getExternalFilesDir(null),
+                    "Metadata/${directory.name}.json"
+                )
+                var metadata: StickerSet? = null
+
                 val preference = Preference(requireContext())
-                preference.title = directory.name
+
+                if (metadataFile.exists()) {
+                    try {
+                        metadata = Json.decodeFromString<StickerSet>(metadataFile.readText())
+                    } catch (e: Exception) {
+                        Log.w("", e)
+                    }
+                }
+
+                if (metadata != null) {
+                    preference.title = metadata.title
+                    preference.summary = metadata.name
+                } else {
+                    preference.title = directory.name
+                }
+
                 var image: File? = null
                 try {
                     image = directory.listFiles { file ->
@@ -97,19 +102,22 @@ class FirstFragment : PreferenceFragmentCompat() {
                         flexLayoutManager.justifyContent = JustifyContent.SPACE_AROUND
                         recyclerView.layoutManager = flexLayoutManager
 
-                        previewScale = requireContext().getPreference(
-                            stringPreferencesKey(STICKER_PER_LINE), "0.5"
-                        ).toFloatOrNull() ?: 0.5f
-
-                        recyclerView.adapter = GalleryAdapter(directory)
+                        recyclerView.adapter = GalleryAdapter(
+                            requireContext(),
+                            this@FirstFragment,
+                            directory.listFiles()!!
+                        )
                         MaterialAlertDialogBuilder(requireContext())
-                            .setTitle(directory.name)
+                            .setTitle(preference.title)
                             .setView(recyclerView)
                             .setNegativeButton("Delete") { _, _ ->
                                 MaterialAlertDialogBuilder(requireContext())
                                     .setMessage("Delete?")
                                     .setNegativeButton("Confirm") { _, _ ->
                                         directory.deleteRecursively()
+                                        if (metadataFile.exists()) {
+                                            metadataFile.delete()
+                                        }
                                         requireActivity().recreate()
                                     }
                                     .setNeutralButton("Cancel") { dialog, _ ->
@@ -158,7 +166,12 @@ class FirstFragment : PreferenceFragmentCompat() {
                 // as you specify a parent activity in AndroidManifest.xml.
                 return when (menuItem.itemId) {
                     R.id.action_settings -> {
-                        findNavController().navigate(R.id.action_FirstFragment_to_SecondFragment)
+                        findNavController().navigate(R.id.action_FirstFragment_to_Setting)
+                        true
+                    }
+
+                    R.id.action_search -> {
+                        findNavController().navigate(R.id.action_FirstFragment_to_Search)
                         true
                     }
 
@@ -174,187 +187,6 @@ class FirstFragment : PreferenceFragmentCompat() {
     override fun onResume() {
         super.onResume()
         (requireActivity() as MainActivity).fab.visibility = View.VISIBLE
-    }
-
-    inner class GalleryAdapter(private val directory: File) :
-        RecyclerView.Adapter<GalleryAdapter.ViewHolderTemplate<ImageView>>() {
-
-        private val array: Array<File> = directory.listFiles { file ->
-            val extension = file.extension
-            extension.equals("png", true)
-                    || extension.equals("webp", true)
-                    || extension.equals("gif", true)
-                    || extension.equals("webm", true)
-        } ?: emptyArray()
-
-        inner class ViewHolderTemplate<T : View>(val view: T) : ViewHolder(view)
-
-        override fun onCreateViewHolder(
-            parent: ViewGroup,
-            viewType: Int
-        ): ViewHolderTemplate<ImageView> {
-            return ViewHolderTemplate(ImageView(context))
-        }
-
-        override fun getItemCount(): Int = array.size
-
-        override fun onBindViewHolder(holder: ViewHolderTemplate<ImageView>, position: Int) {
-            val params = holder.view.layoutParams
-            if (params is FlexboxLayout.LayoutParams) {
-                params.flexGrow = 1.0f
-            }
-            holder.view.setOnClickListener {
-                lifecycleScope.launch {
-                    var webpFile = array[position]
-                    try {
-                        val prepareDialog: AlertDialog = with(requireContext()) {
-                            loadingDialog()
-                        }
-                        val encodeWebp = requireContext().getPreference(
-                            booleanPreferencesKey(RECODE_WEBP), false
-                        )
-                        val replaceTransparent = requireContext().getPreference(
-                            booleanPreferencesKey(REPLACE_TRANSPARENT), false
-                        )
-                        if ((webpFile.extension.equals(
-                                "webp",
-                                true
-                            ) || webpFile.extension.equals(
-                                "png",
-                                true
-                            )) && (encodeWebp || replaceTransparent)
-                        ) {
-                            withContext(Dispatchers.IO) {
-                                val cacheDirectory =
-                                    File(requireContext().externalCacheDir, "Stickers")
-                                val stickerCacheDirectory = File(cacheDirectory, directory.name)
-                                if (!stickerCacheDirectory.exists()) {
-                                    stickerCacheDirectory.mkdirs()
-                                }
-                                val inputStream = webpFile.inputStream()
-                                val bitmap = BitmapFactory.decodeStream(inputStream)
-                                inputStream.close()
-
-                                if (replaceTransparent) {
-                                    try {
-                                        val replaceCache = File(
-                                            stickerCacheDirectory,
-                                            webpFile.nameWithoutExtension + ".png"
-                                        )
-                                        if (!replaceCache.exists()) {
-                                            replaceCache.createNewFile()
-                                        }
-
-                                        val replaceBitmap = createBitmap(
-                                            bitmap.width,
-                                            bitmap.height,
-                                            bitmap.config ?: Bitmap.Config.ARGB_8888
-                                        )
-                                        replaceBitmap.eraseColor(Color.WHITE)
-                                        val canvas = Canvas(replaceBitmap)
-                                        canvas.drawBitmap(bitmap, 0f, 0f, null)
-                                        val outputStream = replaceCache.outputStream()
-                                        replaceBitmap.compress(
-                                            Bitmap.CompressFormat.PNG,
-                                            100,
-                                            outputStream
-                                        )
-                                        outputStream.flush()
-                                        outputStream.close()
-                                        webpFile = replaceCache
-                                    } catch (e: Exception) {
-                                        with(requireContext()) {
-                                            e.toString().alert()
-                                        }
-                                    }
-                                }
-
-                                if (encodeWebp) {
-                                    val stickerCache = File(
-                                        stickerCacheDirectory,
-                                        webpFile.nameWithoutExtension + ".gif"
-                                    )
-                                    if (!stickerCache.exists()) {
-                                        stickerCache.createNewFile()
-                                    }
-                                    if (requireContext().getPreference(
-                                            booleanPreferencesKey(
-                                                GIF_CODER
-                                            ), true
-                                        )
-                                    ) {
-                                        val burstLinker = BurstLinker()
-                                        try {
-                                            burstLinker.init(
-                                                bitmap.width,
-                                                bitmap.height,
-                                                stickerCache.absolutePath
-                                            )
-                                            burstLinker.connect(
-                                                bitmap,
-                                                requireContext().getQuantizer(),
-                                                requireContext().getDither(),
-                                                0,
-                                                0,
-                                                1
-                                            )
-                                        } catch (e: Exception) {
-                                            with(requireContext()) {
-                                                e.toString().alert()
-                                            }
-                                        } finally {
-                                            burstLinker.release()
-                                        }
-                                    } else {
-                                        val encoder = AnimatedGifEncoder()
-                                        val byteArrayOutputStream = ByteArrayOutputStream()
-                                        encoder.start(byteArrayOutputStream)
-                                        encoder.addFrame(bitmap)
-                                        encoder.finish()
-                                        stickerCache.writeBytes(byteArrayOutputStream.toByteArray())
-                                    }
-                                    webpFile = stickerCache
-                                }
-
-                            }
-                        }
-                        prepareDialog.dismiss()
-                        val intent = Intent().apply {
-                            action = Intent.ACTION_SEND
-                            val uri = FileProvider.getUriForFile(
-                                requireContext(),
-                                "io.github.cryolitia.stickerbot.stickerprovider",
-                                webpFile
-                            )
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
-                            type = MimeTypeMap.getSingleton()
-                                .getMimeTypeFromExtension(webpFile.extension)
-                        }
-                        requireContext().startActivity(Intent.createChooser(intent, ""))
-                    } catch (e: Exception) {
-                        with(requireContext()) {
-                            e.toString().alert()
-                        }
-                    }
-                }
-            }
-
-            try {
-                val stream = array[position].inputStream()
-                val bitmap = BitmapFactory.decodeStream(stream)
-                holder.view.setImageBitmap(
-                    bitmap.scale(
-                        (bitmap.width * previewScale).toInt(),
-                        (bitmap.height * previewScale).toInt(),
-                        false
-                    )
-                )
-                stream.close()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
     }
 }
 
