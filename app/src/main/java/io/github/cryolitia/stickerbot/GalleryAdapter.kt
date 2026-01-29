@@ -9,7 +9,6 @@ import android.graphics.Color
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.MimeTypeMap
-import android.widget.ImageView
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
 import androidx.core.graphics.createBitmap
@@ -20,12 +19,12 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.RecyclerView.ViewHolder
-import com.bilibili.burstlinker.BurstLinker
 import com.google.android.flexbox.FlexboxLayout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
+import pl.droidsonroids.gif.GifDrawableBuilder
+import pl.droidsonroids.gif.GifImageView
 import java.io.File
 import java.util.Arrays
 
@@ -34,7 +33,7 @@ class GalleryAdapter(
     val lifecycleOwner: LifecycleOwner,
     fileList: Array<File>
 ) :
-    RecyclerView.Adapter<GalleryAdapter.ViewHolderTemplate<ImageView>>() {
+    RecyclerView.Adapter<GalleryAdapter.ViewHolderTemplate<GifImageView>>() {
 
     var previewScale: Float = 0.5f
 
@@ -59,13 +58,13 @@ class GalleryAdapter(
     override fun onCreateViewHolder(
         parent: ViewGroup,
         viewType: Int
-    ): ViewHolderTemplate<ImageView> {
-        return ViewHolderTemplate(ImageView(context))
+    ): ViewHolderTemplate<GifImageView> {
+        return ViewHolderTemplate(GifImageView(context))
     }
 
     override fun getItemCount(): Int = array.size
 
-    override fun onBindViewHolder(holder: ViewHolderTemplate<ImageView>, position: Int) {
+    override fun onBindViewHolder(holder: ViewHolderTemplate<GifImageView>, position: Int) {
         val params = holder.view.layoutParams
         if (params is FlexboxLayout.LayoutParams) {
             params.flexGrow = 1.0f
@@ -133,6 +132,7 @@ class GalleryAdapter(
                                 } catch (e: Exception) {
                                     with(context) {
                                         e.toString().alert()
+                                        e.printStackTrace()
                                     }
                                 }
                             }
@@ -145,42 +145,33 @@ class GalleryAdapter(
                                 if (!stickerCache.exists()) {
                                     stickerCache.createNewFile()
                                 }
-                                if (context.getPreference(
-                                        booleanPreferencesKey(
-                                            GIF_CODER
-                                        ), true
-                                    )
-                                ) {
-                                    val burstLinker = BurstLinker()
-                                    try {
-                                        burstLinker.init(
-                                            bitmap.width,
-                                            bitmap.height,
-                                            stickerCache.absolutePath
+
+                                var encoder: GifEncoder? = null
+                                try {
+                                    encoder = if (context.getPreference(
+                                            booleanPreferencesKey(
+                                                GIF_CODER
+                                            ), true
                                         )
-                                        burstLinker.connect(
-                                            bitmap,
-                                            context.getQuantizer(),
-                                            context.getDither(),
-                                            0,
-                                            0,
-                                            1
-                                        )
-                                    } catch (e: Exception) {
-                                        with(context) {
-                                            e.toString().alert()
-                                        }
-                                    } finally {
-                                        burstLinker.release()
-                                    }
-                                } else {
-                                    val encoder = AnimatedGifEncoder()
-                                    val byteArrayOutputStream = ByteArrayOutputStream()
-                                    encoder.start(byteArrayOutputStream)
+                                    ) BilibiliGifEncoder(
+                                        stickerCache,
+                                        context.getQuantizer(),
+                                        context.getDither(),
+                                        bitmap.width,
+                                        bitmap.height
+                                    ) else NbadalGifEncoder(stickerCache)
+
+                                    encoder.start()
                                     encoder.addFrame(bitmap)
-                                    encoder.finish()
-                                    stickerCache.writeBytes(byteArrayOutputStream.toByteArray())
+                                } catch (e: Exception) {
+                                    with(context) {
+                                        e.toString().alert()
+                                        e.printStackTrace()
+                                    }
+                                } finally {
+                                    encoder?.end()
                                 }
+
                                 webpFile = stickerCache
                             }
 
@@ -203,24 +194,43 @@ class GalleryAdapter(
                 } catch (e: Exception) {
                     with(context) {
                         e.toString().alert()
+                        e.printStackTrace()
                     }
                 }
             }
         }
 
+        // android/graphics/RecordingCanvas.java#MAX_BITMAP_SIZE
+        val input = array[position].inputStream()
         try {
-            val stream = array[position].inputStream()
-            val bitmap = BitmapFactory.decodeStream(stream)
-            holder.view.setImageBitmap(
-                bitmap.scale(
-                    (bitmap.width * previewScale).toInt(),
-                    (bitmap.height * previewScale).toInt(),
-                    false
-                )
-            )
-            stream.close()
+            BitmapFactory.decodeStream(array[position].inputStream())
         } catch (e: Exception) {
             e.printStackTrace()
+        } finally {
+            input.close()
+        }
+
+        val stream = array[position].inputStream()
+        try {
+            val file = array[position]
+            if (file.extension == "gif") {
+                val drawable =
+                    GifDrawableBuilder().sampleSize((1 / previewScale).toInt()).from(file).build()
+                holder.view.setImageDrawable(drawable)
+            } else {
+                val bitmap = BitmapFactory.decodeStream(stream)
+                holder.view.setImageBitmap(
+                    bitmap.scale(
+                        (bitmap.width * previewScale).toInt(),
+                        (bitmap.height * previewScale).toInt(),
+                        false
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            stream.close()
         }
     }
 }

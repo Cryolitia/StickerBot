@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.os.Bundle
 import android.os.PowerManager
 import android.util.TypedValue
@@ -15,6 +16,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.scale
 import androidx.core.view.WindowCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.datastore.core.DataStore
@@ -28,6 +31,8 @@ import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.navigateUp
 import androidx.navigation.ui.setupActionBarWithNavController
+import com.airbnb.lottie.LottieCompositionFactory
+import com.airbnb.lottie.LottieDrawable
 import com.google.android.material.color.DynamicColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -61,7 +66,9 @@ import kotlinx.serialization.json.Json
 import org.apache.commons.io.IOUtils
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.nio.charset.StandardCharsets
 import java.util.zip.GZIPInputStream
+import kotlin.math.min
 import kotlin.system.exitProcess
 
 
@@ -217,6 +224,7 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
+
                 val response: HttpResponse
 
                 try {
@@ -231,14 +239,16 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
-                    prepareDialog.dismiss()
                     if (!response.status.isSuccess()) {
                         Pair(response.status.toString(), response.body<String>()).alert()
                         return@onClickPositiveButton
                     }
                 } catch (e: Throwable) {
                     e.toString().alert()
+                    e.printStackTrace()
                     return@onClickPositiveButton
+                } finally {
+                    prepareDialog.dismiss()
                 }
 
                 val stickerSetResult: TelegramResult<StickerSet> = response.body()
@@ -290,11 +300,12 @@ class MainActivity : AppCompatActivity() {
                                         dialogBinding.StickerSetImage.visibility = View.VISIBLE
                                     }
                                 } catch (e: Exception) {
-                                    e.toString().toast()
+                                    e.toString().alert()
+                                    e.printStackTrace()
                                 }
                             },
                             {
-                                it.toast()
+                                it.alert()
                             })
                     }
                     val size = stickerSetResult.result.stickers.size
@@ -315,6 +326,14 @@ class MainActivity : AppCompatActivity() {
                                 dialogBinding.StickerDetail.text = sticker.toString()
                                 dialogBinding.emoji.text = sticker.emoji ?: ""
                             }
+
+                            withContext(Dispatchers.Main) {
+                                i++
+                                dialogBinding.linearProgressIndicator.setProgressCompat(i, true)
+                                dialogBinding.progressText.text = "$i / $size"
+                            }
+
+                            lateinit var stickerFile: File
                             if (sticker.is_video) {
                                 withContext(Dispatchers.Main) {
                                     dialogBinding.StickerImage.visibility = View.GONE
@@ -322,6 +341,7 @@ class MainActivity : AppCompatActivity() {
                                 }
                             } else if (sticker.is_animated) {
                                 withContext(Dispatchers.Main) {
+                                    dialogBinding.FrameLayout.visibility = View.VISIBLE
                                     dialogBinding.StickerImage.visibility = View.INVISIBLE
                                     dialogBinding.LottieView.visibility = View.VISIBLE
                                 }
@@ -333,12 +353,103 @@ class MainActivity : AppCompatActivity() {
                                         filePath = filePath.replace(".tgs", ".json")
                                         input.close()
                                         gzip.close()
+                                        val jsonString = String(
+                                            data,
+                                            StandardCharsets.UTF_8
+                                        )
                                         withContext(Dispatchers.Main) {
-                                            dialogBinding.LottieView.setAnimation(
-                                                ByteArrayInputStream(data),
-                                                null
+                                            dialogBinding.LottieView.setAnimationFromJson(
+                                                jsonString,
+                                                sticker.file_unique_id
                                             )
                                             dialogBinding.LottieView.playAnimation()
+                                        }
+
+                                        val lottieComposition =
+                                            LottieCompositionFactory.fromJsonStringSync(
+                                                jsonString, sticker.file_unique_id
+                                            ).value!!
+                                        val lottieDrawable = LottieDrawable()
+                                        lottieDrawable.callback = View(context)
+                                        lottieDrawable.composition = lottieComposition
+                                        val delay = (1000.0 / lottieComposition.frameRate).toInt()
+                                        var width = lottieDrawable.intrinsicWidth
+                                        var height = lottieDrawable.intrinsicHeight
+                                        val durationInFrames: Int =
+                                            lottieDrawable.composition.durationFrames.toInt()
+                                        stickerFile = File(stickerSetDirectory, "$fileUniqueId.gif")
+
+                                        val maxSize = getPreference(
+                                            stringPreferencesKey(LIMIT_SIZE),
+                                            "512"
+                                        ).toFloatOrNull() ?: 512.0F
+                                        val scaleFactor = minOf(
+                                            min(maxSize, sticker.width.toFloat()) / width,
+                                            min(maxSize, sticker.height.toFloat()) / height,
+                                            1.0F
+                                        )
+
+                                        var encoder: GifEncoder? = null
+                                        try {
+                                            encoder = if (context.getPreference(
+                                                    booleanPreferencesKey(
+                                                        GIF_CODER
+                                                    ), true
+                                                )
+                                            ) BilibiliGifEncoder(
+                                                stickerFile,
+                                                context.getQuantizer(),
+                                                context.getDither(),
+                                                (width * scaleFactor).toInt(),
+                                                (height * scaleFactor).toInt()
+                                            ) else NbadalGifEncoder(stickerFile)
+
+                                            encoder.start()
+                                            encoder.setDelay(delay)
+
+                                            withContext(Dispatchers.Main) {
+                                                dialogBinding.FrameLinearProgressIndicator.max =
+                                                    durationInFrames
+                                                dialogBinding.FrameLinearProgressIndicator.progress =
+                                                    0
+                                            }
+
+                                            lottieDrawable.setBounds(0, 0, width, height)
+
+                                            for (index in 0..durationInFrames) {
+                                                lottieDrawable.frame = index
+                                                val bitmap = createBitmap(width, height)
+                                                val canvas = Canvas(bitmap)
+                                                lottieDrawable.draw(canvas)
+                                                try {
+                                                    encoder.addFrame(
+                                                        bitmap.scale(
+                                                            (width * scaleFactor).toInt(),
+                                                            (height * scaleFactor).toInt()
+                                                        )
+                                                    )
+                                                } catch (e: Exception) {
+                                                    e.toString().toast()
+                                                    e.printStackTrace()
+                                                }
+
+                                                withContext(Dispatchers.Main) {
+                                                    dialogBinding.FrameImageView.setImageBitmap(bitmap)
+                                                    dialogBinding.FrameTextView.text =
+                                                        "$index / $durationInFrames"
+                                                    dialogBinding.FrameLinearProgressIndicator.setProgressCompat(
+                                                        index,
+                                                        true
+                                                    )
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            with(context) {
+                                                e.toString().alert()
+                                                e.printStackTrace()
+                                            }
+                                        } finally {
+                                            encoder?.end()
                                         }
                                     } catch (e: Exception) {
                                         e.toString().alert()
@@ -348,25 +459,29 @@ class MainActivity : AppCompatActivity() {
                             } else {
                                 withContext(Dispatchers.Main) {
                                     try {
+                                        dialogBinding.FrameLayout.visibility = View.GONE
                                         dialogBinding.LottieView.visibility = View.GONE
                                         val bitmap =
                                             BitmapFactory.decodeByteArray(data, 0, data.size)
                                         dialogBinding.StickerImage.setImageBitmap(bitmap)
                                         dialogBinding.StickerImage.visibility = View.VISIBLE
                                     } catch (e: Exception) {
-                                        e.toString().toast()
+                                        e.toString().alert()
+                                        e.printStackTrace()
                                     }
                                 }
-                            }
-                            val extension = filePath.substring(filePath.lastIndexOf('.'))
-                            val stickerFile = File(stickerSetDirectory, fileUniqueId + extension)
-                            if (!stickerFile.exists()) {
-                                withContext(Dispatchers.IO) {
-                                    stickerFile.createNewFile()
+
+                                val extension = filePath.substring(filePath.lastIndexOf('.'))
+                                stickerFile = File(stickerSetDirectory, fileUniqueId + extension)
+                                if (!stickerFile.exists()) {
+                                    withContext(Dispatchers.IO) {
+                                        stickerFile.createNewFile()
+                                    }
                                 }
+                                stickerFile.writeBytes(data)
                             }
-                            stickerFile.writeBytes(data)
-                            if (!sticker.is_animated || !sticker.is_video) {
+
+                            if (!sticker.is_video) {
                                 val uri = FileProvider.getUriForFile(
                                     context,
                                     "io.github.cryolitia.stickerbot.stickerprovider",
@@ -393,13 +508,8 @@ class MainActivity : AppCompatActivity() {
                                 stickerList.add(stickerBuilder)
                             }
                         }, {
-                            it.toast()
+                            it.alert()
                         })
-                        withContext(Dispatchers.Main) {
-                            i++
-                            dialogBinding.linearProgressIndicator.setProgressCompat(i, true)
-                            dialogBinding.progressText.text = "$i / $size"
-                        }
                     }
                     if (stickerList.isNotEmpty()) {
                         stickerPackBuilder.setHasSticker(*stickerList.toTypedArray())

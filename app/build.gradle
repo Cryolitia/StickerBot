@@ -62,8 +62,9 @@ dependencies {
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2"
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
 
-    implementation("com.bilibili:burstlinker:0.0.14")
+    implementation("com.bilibili:burstlinker:0.0.15")
     implementation("com.airbnb.android:lottie:6.7.1")
+    implementation('pl.droidsonroids.gif:android-gif-drawable:1.2.30')
 
     implementation "commons-io:commons-io:2.21.0"
 }

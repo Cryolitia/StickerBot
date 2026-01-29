@@ -1,6 +1,5 @@
 package io.github.cryolitia.stickerbot
 
-import android.content.Context
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Log
@@ -14,7 +13,6 @@ import android.view.ViewGroup
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.MenuHost
 import androidx.core.view.MenuProvider
-import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -23,7 +21,6 @@ import androidx.preference.Preference
 import androidx.preference.Preference.OnPreferenceClickListener
 import androidx.preference.PreferenceFragmentCompat
 import androidx.recyclerview.widget.RecyclerView
-import com.bilibili.burstlinker.BurstLinker
 import com.google.android.flexbox.FlexDirection
 import com.google.android.flexbox.FlexboxLayoutManager
 import com.google.android.flexbox.JustifyContent
@@ -85,13 +82,14 @@ class FirstFragment : PreferenceFragmentCompat() {
                     }
                 }
                 if (image != null) {
+                    val stream = image.inputStream()
                     try {
-                        val stream = image.inputStream()
-                        preference.icon =
-                            BitmapFactory.decodeStream(stream).toDrawable(resources)
-                        stream.close()
+                        val bitmap = BitmapFactory.decodeStream(stream)
+                        preference.icon = bitmap.toDrawable(resources)
                     } catch (e: Exception) {
                         e.printStackTrace()
+                    } finally {
+                        stream.close()
                     }
                 }
                 preference.onPreferenceClickListener = OnPreferenceClickListener {
@@ -187,29 +185,5 @@ class FirstFragment : PreferenceFragmentCompat() {
     override fun onResume() {
         super.onResume()
         (requireActivity() as MainActivity).fab.visibility = View.VISIBLE
-    }
-}
-
-suspend fun Context.getQuantizer(): Int {
-    val quantizer = getPreference(stringPreferencesKey(QUANTIZER))
-    return when (quantizer) {
-        "uniform" -> BurstLinker.UNIFROM_QUANTIZER
-        "median_cut" -> BurstLinker.MEDIAN_CUT_QUANTIZER
-        "kmeans" -> BurstLinker.KMEANS_QUANTIZER
-        "random" -> BurstLinker.RANDOM_QUANTIZER
-        "octree" -> BurstLinker.OCTREE_QUANTIZER
-        "neu_quant" -> BurstLinker.NEU_QUANT_QUANTIZER
-        else -> BurstLinker.KMEANS_QUANTIZER
-    }
-}
-
-suspend fun Context.getDither(): Int {
-    val dither = getPreference(stringPreferencesKey(DITHER))
-    return when (dither) {
-        "no" -> BurstLinker.NO_DITHER
-        "m2" -> BurstLinker.M2_DITHER
-        "bayer" -> BurstLinker.BAYER_DITHER
-        "floyd_steinberg" -> BurstLinker.FLOYD_STEINBERG_DITHER
-        else -> BurstLinker.NO_DITHER
     }
 }

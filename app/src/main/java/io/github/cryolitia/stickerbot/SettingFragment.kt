@@ -55,6 +55,7 @@ const val REPLACE_TRANSPARENT = "replace_transparent"
 const val OPEN_DOCUMENT = "open_document"
 const val TEST_BOT = "test_bot"
 const val STICKER_PER_LINE = "sticker_per_line"
+const val LIMIT_SIZE = "limit_size"
 
 class SettingFragment : PreferenceFragmentCompat() {
 
@@ -79,6 +80,9 @@ class SettingFragment : PreferenceFragmentCompat() {
         setPreferencesFromResource(R.xml.setting_preference, rootKey)
         findPreference<EditTextPreference>(STICKER_PER_LINE)?.setOnBindEditTextListener { editText ->
             editText.inputType = InputType.TYPE_NUMBER_FLAG_DECIMAL
+        }
+        findPreference<EditTextPreference>(LIMIT_SIZE)?.setOnBindEditTextListener { editText ->
+            editText.inputType = InputType.TYPE_NUMBER_FLAG_SIGNED
         }
         findPreference<SwitchPreferenceCompat>(GIF_CODER)?.summaryProvider =
             Preference.SummaryProvider<SwitchPreferenceCompat> {
@@ -135,6 +139,7 @@ class SettingFragment : PreferenceFragmentCompat() {
                         response.body<String>().alert()
                     } catch (e: Throwable) {
                         e.toString().alert()
+                        e.printStackTrace()
                     } finally {
                         prepareDialog.dismiss()
                     }

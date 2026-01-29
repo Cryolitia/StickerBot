@@ -7,6 +7,12 @@
         app:useSimpleSummaryProvider="true" />
 
     <EditTextPreference
+        app:defaultValue="512"
+        app:key="limit_size"
+        app:title="Limit the maximum width/height of generated GIFs"
+        app:useSimpleSummaryProvider="true" />
+
+    <EditTextPreference
         app:key="telegram_bot_token"
         app:title="Telegram Bot Token"
         app:useSimpleSummaryProvider="true" />
