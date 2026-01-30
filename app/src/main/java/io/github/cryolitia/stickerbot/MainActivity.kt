@@ -60,6 +60,7 @@ import io.ktor.http.append
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -318,198 +319,209 @@ class MainActivity : AppCompatActivity() {
                         .setName(stickerSetResult.result.title)
                         .setUrl("cryolitia://stickerset/${stickerSetResult.result.name}")
                     val stickerList = mutableListOf<StickerBuilder>()
-                    for (sticker in stickerSetResult.result.stickers) {
-                        client.getFile(token, sticker.file_id, { data, fileUniqueId, filePath ->
-                            var data = data
-                            var filePath = filePath
-                            withContext(Dispatchers.Main) {
-                                dialogBinding.StickerDetail.text = sticker.toString()
-                                dialogBinding.emoji.text = sticker.emoji ?: ""
-                            }
 
-                            withContext(Dispatchers.Main) {
-                                i++
-                                dialogBinding.linearProgressIndicator.setProgressCompat(i, true)
-                                dialogBinding.progressText.text = "$i / $size"
-                            }
+                    val channel: Channel<Pair<Sticker, Triple<ByteArray, String, String>>> =
+                        Channel(1)
+                    launch {
+                        for (sticker in stickerSetResult.result.stickers) {
+                            client.getFile(token, sticker.file_id, { data, fileUniqueId, filePath ->
+                                channel.send(Pair(sticker, Triple(data, fileUniqueId, filePath)))
+                            }, {
+                                it.alert()
+                            })
+                        }
+                        channel.close()
+                    }
+                    for (y in channel) {
+                        var sticker = y.first
+                        var data = y.second.first
+                        var fileUniqueId = y.second.second
+                        var filePath = y.second.third
+                        withContext(Dispatchers.Main) {
+                            dialogBinding.StickerDetail.text = sticker.toString()
+                            dialogBinding.emoji.text = sticker.emoji ?: ""
+                        }
 
-                            lateinit var stickerFile: File
-                            if (sticker.is_video) {
-                                withContext(Dispatchers.Main) {
-                                    dialogBinding.StickerImage.visibility = View.GONE
-                                    dialogBinding.LottieView.visibility = View.GONE
-                                }
-                            } else if (sticker.is_animated) {
-                                withContext(Dispatchers.Main) {
-                                    dialogBinding.FrameLayout.visibility = View.VISIBLE
-                                    dialogBinding.StickerImage.visibility = View.INVISIBLE
-                                    dialogBinding.LottieView.visibility = View.VISIBLE
-                                }
-                                withContext(Dispatchers.IO) {
-                                    try {
-                                        val input = ByteArrayInputStream(data)
-                                        val gzip = GZIPInputStream(input)
-                                        data = IOUtils.toByteArray(gzip)
-                                        filePath = filePath.replace(".tgs", ".json")
-                                        input.close()
-                                        gzip.close()
-                                        val jsonString = String(
-                                            data,
-                                            StandardCharsets.UTF_8
+                        withContext(Dispatchers.Main) {
+                            i++
+                            dialogBinding.linearProgressIndicator.setProgressCompat(i, true)
+                            dialogBinding.progressText.text = "$i / $size"
+                        }
+
+                        lateinit var stickerFile: File
+                        if (sticker.is_video) {
+                            withContext(Dispatchers.Main) {
+                                dialogBinding.StickerImage.visibility = View.GONE
+                                dialogBinding.LottieView.visibility = View.GONE
+                            }
+                        } else if (sticker.is_animated) {
+                            withContext(Dispatchers.Main) {
+                                dialogBinding.FrameLayout.visibility = View.VISIBLE
+                                dialogBinding.StickerImage.visibility = View.INVISIBLE
+                                dialogBinding.LottieView.visibility = View.VISIBLE
+                            }
+                            withContext(Dispatchers.IO) {
+                                try {
+                                    val input = ByteArrayInputStream(data)
+                                    val gzip = GZIPInputStream(input)
+                                    data = IOUtils.toByteArray(gzip)
+                                    filePath = filePath.replace(".tgs", ".json")
+                                    input.close()
+                                    gzip.close()
+                                    val jsonString = String(
+                                        data,
+                                        StandardCharsets.UTF_8
+                                    )
+                                    withContext(Dispatchers.Main) {
+                                        dialogBinding.LottieView.setAnimationFromJson(
+                                            jsonString,
+                                            sticker.file_unique_id
                                         )
-                                        withContext(Dispatchers.Main) {
-                                            dialogBinding.LottieView.setAnimationFromJson(
-                                                jsonString,
-                                                sticker.file_unique_id
+                                        dialogBinding.LottieView.playAnimation()
+                                    }
+
+                                    val lottieComposition =
+                                        LottieCompositionFactory.fromJsonStringSync(
+                                            jsonString, sticker.file_unique_id
+                                        ).value!!
+                                    val lottieDrawable = LottieDrawable()
+                                    lottieDrawable.callback = View(context)
+                                    lottieDrawable.composition = lottieComposition
+                                    val delay = (1000.0 / lottieComposition.frameRate).toInt()
+                                    var width = lottieDrawable.intrinsicWidth
+                                    var height = lottieDrawable.intrinsicHeight
+                                    val durationInFrames: Int =
+                                        lottieDrawable.composition.durationFrames.toInt()
+                                    stickerFile = File(stickerSetDirectory, "$fileUniqueId.gif")
+
+                                    val maxSize = getPreference(
+                                        stringPreferencesKey(LIMIT_SIZE),
+                                        "512"
+                                    ).toFloatOrNull() ?: 512.0F
+                                    val scaleFactor = minOf(
+                                        min(maxSize, sticker.width.toFloat()) / width,
+                                        min(maxSize, sticker.height.toFloat()) / height,
+                                        1.0F
+                                    )
+
+                                    var encoder: GifEncoder? = null
+                                    try {
+                                        encoder = if (context.getPreference(
+                                                booleanPreferencesKey(
+                                                    GIF_CODER
+                                                ), true
                                             )
-                                            dialogBinding.LottieView.playAnimation()
+                                        ) BilibiliGifEncoder(
+                                            stickerFile,
+                                            context.getQuantizer(),
+                                            context.getDither(),
+                                            (width * scaleFactor).toInt(),
+                                            (height * scaleFactor).toInt()
+                                        ) else NbadalGifEncoder(stickerFile)
+
+                                        encoder.start()
+                                        encoder.setDelay(delay)
+
+                                        withContext(Dispatchers.Main) {
+                                            dialogBinding.FrameLinearProgressIndicator.max =
+                                                durationInFrames
+                                            dialogBinding.FrameLinearProgressIndicator.progress =
+                                                0
                                         }
 
-                                        val lottieComposition =
-                                            LottieCompositionFactory.fromJsonStringSync(
-                                                jsonString, sticker.file_unique_id
-                                            ).value!!
-                                        val lottieDrawable = LottieDrawable()
-                                        lottieDrawable.callback = View(context)
-                                        lottieDrawable.composition = lottieComposition
-                                        val delay = (1000.0 / lottieComposition.frameRate).toInt()
-                                        var width = lottieDrawable.intrinsicWidth
-                                        var height = lottieDrawable.intrinsicHeight
-                                        val durationInFrames: Int =
-                                            lottieDrawable.composition.durationFrames.toInt()
-                                        stickerFile = File(stickerSetDirectory, "$fileUniqueId.gif")
+                                        lottieDrawable.setBounds(0, 0, width, height)
 
-                                        val maxSize = getPreference(
-                                            stringPreferencesKey(LIMIT_SIZE),
-                                            "512"
-                                        ).toFloatOrNull() ?: 512.0F
-                                        val scaleFactor = minOf(
-                                            min(maxSize, sticker.width.toFloat()) / width,
-                                            min(maxSize, sticker.height.toFloat()) / height,
-                                            1.0F
-                                        )
-
-                                        var encoder: GifEncoder? = null
-                                        try {
-                                            encoder = if (context.getPreference(
-                                                    booleanPreferencesKey(
-                                                        GIF_CODER
-                                                    ), true
+                                        for (index in 0..durationInFrames) {
+                                            lottieDrawable.frame = index
+                                            val bitmap = createBitmap(width, height)
+                                            val canvas = Canvas(bitmap)
+                                            lottieDrawable.draw(canvas)
+                                            try {
+                                                encoder.addFrame(
+                                                    bitmap.scale(
+                                                        (width * scaleFactor).toInt(),
+                                                        (height * scaleFactor).toInt()
+                                                    )
                                                 )
-                                            ) BilibiliGifEncoder(
-                                                stickerFile,
-                                                context.getQuantizer(),
-                                                context.getDither(),
-                                                (width * scaleFactor).toInt(),
-                                                (height * scaleFactor).toInt()
-                                            ) else NbadalGifEncoder(stickerFile)
-
-                                            encoder.start()
-                                            encoder.setDelay(delay)
-
-                                            withContext(Dispatchers.Main) {
-                                                dialogBinding.FrameLinearProgressIndicator.max =
-                                                    durationInFrames
-                                                dialogBinding.FrameLinearProgressIndicator.progress =
-                                                    0
-                                            }
-
-                                            lottieDrawable.setBounds(0, 0, width, height)
-
-                                            for (index in 0..durationInFrames) {
-                                                lottieDrawable.frame = index
-                                                val bitmap = createBitmap(width, height)
-                                                val canvas = Canvas(bitmap)
-                                                lottieDrawable.draw(canvas)
-                                                try {
-                                                    encoder.addFrame(
-                                                        bitmap.scale(
-                                                            (width * scaleFactor).toInt(),
-                                                            (height * scaleFactor).toInt()
-                                                        )
-                                                    )
-                                                } catch (e: Exception) {
-                                                    e.toString().toast()
-                                                    e.printStackTrace()
-                                                }
-
-                                                withContext(Dispatchers.Main) {
-                                                    dialogBinding.FrameImageView.setImageBitmap(bitmap)
-                                                    dialogBinding.FrameTextView.text =
-                                                        "$index / $durationInFrames"
-                                                    dialogBinding.FrameLinearProgressIndicator.setProgressCompat(
-                                                        index,
-                                                        true
-                                                    )
-                                                }
-                                            }
-                                        } catch (e: Exception) {
-                                            with(context) {
-                                                e.toString().alert()
+                                            } catch (e: Exception) {
+                                                e.toString().toast()
                                                 e.printStackTrace()
                                             }
-                                        } finally {
-                                            encoder?.end()
+
+                                            withContext(Dispatchers.Main) {
+                                                dialogBinding.FrameImageView.setImageBitmap(bitmap)
+                                                dialogBinding.FrameTextView.text =
+                                                    "$index / $durationInFrames"
+                                                dialogBinding.FrameLinearProgressIndicator.setProgressCompat(
+                                                    index,
+                                                    true
+                                                )
+                                            }
                                         }
                                     } catch (e: Exception) {
-                                        e.toString().alert()
-                                        e.printStackTrace()
+                                        with(context) {
+                                            e.toString().alert()
+                                            e.printStackTrace()
+                                        }
+                                    } finally {
+                                        encoder?.end()
                                     }
+                                } catch (e: Exception) {
+                                    e.toString().alert()
+                                    e.printStackTrace()
                                 }
-                            } else {
-                                withContext(Dispatchers.Main) {
-                                    try {
-                                        dialogBinding.FrameLayout.visibility = View.GONE
-                                        dialogBinding.LottieView.visibility = View.GONE
-                                        val bitmap =
-                                            BitmapFactory.decodeByteArray(data, 0, data.size)
-                                        dialogBinding.StickerImage.setImageBitmap(bitmap)
-                                        dialogBinding.StickerImage.visibility = View.VISIBLE
-                                    } catch (e: Exception) {
-                                        e.toString().alert()
-                                        e.printStackTrace()
-                                    }
+                            }
+                        } else {
+                            withContext(Dispatchers.Main) {
+                                try {
+                                    dialogBinding.FrameLayout.visibility = View.GONE
+                                    dialogBinding.LottieView.visibility = View.GONE
+                                    val bitmap =
+                                        BitmapFactory.decodeByteArray(data, 0, data.size)
+                                    dialogBinding.StickerImage.setImageBitmap(bitmap)
+                                    dialogBinding.StickerImage.visibility = View.VISIBLE
+                                } catch (e: Exception) {
+                                    e.toString().alert()
+                                    e.printStackTrace()
                                 }
-
-                                val extension = filePath.substring(filePath.lastIndexOf('.'))
-                                stickerFile = File(stickerSetDirectory, fileUniqueId + extension)
-                                if (!stickerFile.exists()) {
-                                    withContext(Dispatchers.IO) {
-                                        stickerFile.createNewFile()
-                                    }
-                                }
-                                stickerFile.writeBytes(data)
                             }
 
-                            if (!sticker.is_video) {
-                                val uri = FileProvider.getUriForFile(
-                                    context,
-                                    "io.github.cryolitia.stickerbot.stickerprovider",
-                                    stickerFile
-                                )
-                                grantUriPermission(
-                                    "com.google.android.inputmethod.latin",
-                                    uri,
-                                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
-                                )
-                                val stickerBuilder = Indexables.stickerBuilder().apply {
-                                    setName(sticker.file_unique_id)
-                                    setUrl("cryolitia://stickerset/${stickerSetResult.result.name}/${sticker.file_unique_id}")
-                                    setImage(uri.toString())
-                                    if (!sticker.emoji.isNullOrBlank()) {
-                                        setDescription(sticker.emoji)
-                                        setKeywords(sticker.emoji)
-                                        setIsPartOf(
-                                            Indexables.stickerPackBuilder()
-                                                .setName(stickerSetResult.result.title)
-                                        )
-                                    }
+                            val extension = filePath.substring(filePath.lastIndexOf('.'))
+                            stickerFile = File(stickerSetDirectory, fileUniqueId + extension)
+                            if (!stickerFile.exists()) {
+                                withContext(Dispatchers.IO) {
+                                    stickerFile.createNewFile()
                                 }
-                                stickerList.add(stickerBuilder)
                             }
-                        }, {
-                            it.alert()
-                        })
+                            stickerFile.writeBytes(data)
+                        }
+
+                        if (!sticker.is_video) {
+                            val uri = FileProvider.getUriForFile(
+                                context,
+                                "io.github.cryolitia.stickerbot.stickerprovider",
+                                stickerFile
+                            )
+                            grantUriPermission(
+                                "com.google.android.inputmethod.latin",
+                                uri,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+                            )
+                            val stickerBuilder = Indexables.stickerBuilder().apply {
+                                setName(sticker.file_unique_id)
+                                setUrl("cryolitia://stickerset/${stickerSetResult.result.name}/${sticker.file_unique_id}")
+                                setImage(uri.toString())
+                                if (!sticker.emoji.isNullOrBlank()) {
+                                    setDescription(sticker.emoji)
+                                    setKeywords(sticker.emoji)
+                                    setIsPartOf(
+                                        Indexables.stickerPackBuilder()
+                                            .setName(stickerSetResult.result.title)
+                                    )
+                                }
+                            }
+                            stickerList.add(stickerBuilder)
+                        }
                     }
                     if (stickerList.isNotEmpty()) {
                         stickerPackBuilder.setHasSticker(*stickerList.toTypedArray())
